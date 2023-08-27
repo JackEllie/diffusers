@@ -29,7 +29,7 @@ from transformers import (
     CLIPTokenizer,
 )
 
-from ...image_processor import VaeImageProcessor
+from ...image_processor import PipelineImageInput, VaeImageProcessor
 from ...loaders import LoraLoaderMixin, TextualInversionLoaderMixin
 from ...models import AutoencoderKL, UNet2DConditionModel
 from ...models.attention_processor import Attention
@@ -479,7 +479,14 @@ class StableDiffusionPix2PixZeroPipeline(DiffusionPipeline):
             )
             prompt_embeds = prompt_embeds[0]
 
-        prompt_embeds = prompt_embeds.to(dtype=self.text_encoder.dtype, device=device)
+        if self.text_encoder is not None:
+            prompt_embeds_dtype = self.text_encoder.dtype
+        elif self.unet is not None:
+            prompt_embeds_dtype = self.unet.dtype
+        else:
+            prompt_embeds_dtype = prompt_embeds.dtype
+
+        prompt_embeds = prompt_embeds.to(dtype=prompt_embeds_dtype, device=device)
 
         bs_embed, seq_len, _ = prompt_embeds.shape
         # duplicate text embeddings for each generation per prompt, using mps friendly method
@@ -535,7 +542,7 @@ class StableDiffusionPix2PixZeroPipeline(DiffusionPipeline):
             # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
             seq_len = negative_prompt_embeds.shape[1]
 
-            negative_prompt_embeds = negative_prompt_embeds.to(dtype=self.text_encoder.dtype, device=device)
+            negative_prompt_embeds = negative_prompt_embeds.to(dtype=prompt_embeds_dtype, device=device)
 
             negative_prompt_embeds = negative_prompt_embeds.repeat(1, num_images_per_prompt, 1)
             negative_prompt_embeds = negative_prompt_embeds.view(batch_size * num_images_per_prompt, seq_len, -1)
@@ -974,6 +981,9 @@ class StableDiffusionPix2PixZeroPipeline(DiffusionPipeline):
         prompt_embeds_edit[1:2] += edit_direction
 
         # 10. Second denoising loop to generate the edited image.
+        self.scheduler.set_timesteps(num_inference_steps, device=device)
+        timesteps = self.scheduler.timesteps
+
         latents = latents_init
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         with self.progress_bar(total=num_inference_steps) as progress_bar:
@@ -1056,14 +1066,7 @@ class StableDiffusionPix2PixZeroPipeline(DiffusionPipeline):
     def invert(
         self,
         prompt: Optional[str] = None,
-        image: Union[
-            torch.FloatTensor,
-            PIL.Image.Image,
-            np.ndarray,
-            List[torch.FloatTensor],
-            List[PIL.Image.Image],
-            List[np.ndarray],
-        ] = None,
+        image: PipelineImageInput = None,
         num_inference_steps: int = 50,
         guidance_scale: float = 1,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
@@ -1088,7 +1091,7 @@ class StableDiffusionPix2PixZeroPipeline(DiffusionPipeline):
                 The prompt or prompts to guide the image generation. If not defined, one has to pass `prompt_embeds`.
                 instead.
             image (`torch.FloatTensor` `np.ndarray`, `PIL.Image.Image`, `List[torch.FloatTensor]`, `List[PIL.Image.Image]`, or `List[np.ndarray]`):
-                `Image`, or tensor representing an image batch which will be used for conditioning. Can also accpet
+                `Image`, or tensor representing an image batch which will be used for conditioning. Can also accept
                 image latents as `image`, if passing latents directly, it will not be encoded again.
             num_inference_steps (`int`, *optional*, defaults to 50):
                 The number of denoising steps. More denoising steps usually lead to a higher quality image at the
