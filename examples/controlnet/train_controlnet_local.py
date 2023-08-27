@@ -56,7 +56,7 @@ if is_wandb_available():
     import wandb
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
-check_min_version("0.19.0.dev0")
+check_min_version("0.21.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -587,21 +587,13 @@ def make_train_dataset(args, tokenizer, accelerator):
     # download the dataset.
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        #dataset = load_dataset(
         dataset = load_from_disk(
-            args.dataset_name
-            #args.dataset_config_name,
-            #cache_dir=args.cache_dir,
+            args.dataset_name,
         )
     else:
         if args.train_data_dir is not None:
-            #dataset = load_dataset(
-            # dataset = load_from_disk(
-            #     args.train_data_dir,
-            #     cache_dir=args.cache_dir,
-            # )
             dataset = load_from_disk(
-                 args.train_data_dir
+                args.train_data_dir
             )
         # See more about loading custom images at
         # https://huggingface.co/docs/datasets/v2.0.0/en/dataset_script
@@ -609,10 +601,6 @@ def make_train_dataset(args, tokenizer, accelerator):
     # Preprocessing the datasets.
     # We need to tokenize inputs and targets.
     column_names = dataset.column_names
-    print(column_names)
-    print(column_names[0])
-    print(column_names[1])
-    print(column_names[2])
 
     # 6. Get the column names for input/target.
     if args.image_column is None:
